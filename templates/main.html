@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Speech Command Console</title>
+  <style>
+    :root {
+      --bg: #f2f5f7;
+      --panel: #ffffff;
+      --ink: #12313a;
+      --ink-soft: #4b646b;
+      --line: #b8cdd2;
+      --accent: #0a8f6a;
+      --accent-soft: #d9f5ec;
+      --danger: #b0382f;
+      --danger-soft: #fce3e1;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      height: 100dvh;
+      background: radial-gradient(circle at 20% 15%, #ffffff 0%, var(--bg) 55%);
+      color: var(--ink);
+      font-family: "Avenir Next", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 0.74fr 1.82fr;
+      gap: 0.45rem;
+      padding: 0.7rem;
+      height: 100%;
+      grid-template-rows: minmax(0, 1fr);
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      padding: 0.8rem;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .panel-left {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+    }
+
+    .panel-right {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .panel h2 {
+      margin: 0 0 0.85rem;
+      font-size: 1.05rem;
+      letter-spacing: 0.02em;
+    }
+
+    .transcript-stream {
+      height: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fcfefe;
+      padding: 0.75rem;
+      overflow: auto;
+      min-height: 0;
+      overscroll-behavior: contain;
+    }
+
+    .placeholder {
+      margin: 0;
+      color: var(--ink-soft);
+      line-height: 1.4;
+    }
+
+    .transcript-line {
+      margin: 0 0 0.5rem;
+      color: var(--ink);
+      line-height: 1.35;
+      word-break: break-word;
+      font-size: 0.94rem;
+    }
+
+    .transcript-line:last-child {
+      margin-bottom: 0;
+    }
+
+    .right-stack {
+      display: grid;
+      grid-template-rows: 1fr auto;
+      gap: 0.75rem;
+      height: 100%;
+      min-height: 0;
+    }
+
+    .visual-box {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background:
+        linear-gradient(145deg, #ffffff 0%, #f4fbff 40%, #edf4f9 100%);
+      min-height: 450px;
+      position: relative;
+      overflow: hidden;
+      padding: 0;
+    }
+
+    .visual-frame {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #ffffff;
+      display: block;
+    }
+
+    .visual-placeholder {
+      position: absolute;
+      inset: 0;
+      margin: auto;
+      width: fit-content;
+      height: fit-content;
+      text-align: center;
+      color: var(--ink-soft);
+      font-size: 1.02rem;
+      padding: 0 1rem;
+      pointer-events: none;
+    }
+
+    .visual-box.has-content .visual-placeholder {
+      display: none;
+    }
+
+    .listener-strip {
+      border: 2px solid var(--line);
+      border-radius: 10px;
+      background: #fcfffe;
+      min-height: 56px;
+      padding: 0.65rem 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.6rem;
+      transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .listener-strip.command-hit {
+      border-color: #5abf98;
+      background: #eaf9f2;
+      box-shadow: 0 0 0 3px rgba(26, 152, 108, 0.16);
+    }
+
+    .listener-copy {
+      margin: 0;
+      color: var(--ink-soft);
+      font-size: 0.95rem;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .status-chip {
+      border-radius: 999px;
+      padding: 0.25rem 0.7rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      border: 1px solid transparent;
+    }
+
+    .status-chip.listening {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: #9bdcc9;
+    }
+
+    .status-chip.paused {
+      background: #ecf1f3;
+      color: #526a72;
+      border-color: #cad8dd;
+    }
+
+    .controls {
+      margin: 0.7rem 0 0;
+    }
+
+    .toggle-btn {
+      width: 100%;
+      border: none;
+      border-radius: 11px;
+      padding: 0.75rem 1rem;
+      font-size: 0.97rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.12s ease, filter 0.12s ease;
+    }
+
+    .toggle-btn.start {
+      background: var(--accent);
+      color: #ffffff;
+    }
+
+    .toggle-btn.stop {
+      background: var(--danger-soft);
+      color: var(--danger);
+      border: 1px solid #e4aea9;
+    }
+
+    .toggle-btn:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.02);
+    }
+
+    .toggle-btn:active {
+      transform: translateY(0);
+    }
+
+    @media (max-width: 980px) {
+      body {
+        height: auto;
+        min-height: 100dvh;
+        overflow: auto;
+      }
+
+      .layout {
+        grid-template-columns: 1fr;
+        height: auto;
+        grid-template-rows: none;
+      }
+
+      .visual-box {
+        min-height: 240px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="layout">
+    <section class="panel panel-left">
+      <h2>Streaming Text</h2>
+      <div id="transcriptStream" class="transcript-stream">
+        {% if initial_lines %}
+          {% for line in initial_lines %}
+            <p class="transcript-line">{{ line }}</p>
+          {% endfor %}
+        {% else %}
+          <p id="transcriptPlaceholder" class="placeholder">
+            Live transcription stream will render here.
+          </p>
+        {% endif %}
+      </div>
+      <form class="controls" method="post" action="{{ url_for('toggle_listening') }}">
+        <button
+          class="toggle-btn {{ 'stop' if is_listening else 'start' }}"
+          type="submit"
+        >
+          {{ 'Pause Transcription' if is_listening else 'Start Transcription' }}
+        </button>
+      </form>
+    </section>
+
+    <section class="panel panel-right">
+      <h2>Visual Workspace</h2>
+      <div class="right-stack">
+        <div class="visual-box">
+          <iframe id="visualFrame" class="visual-frame" sandbox="allow-same-origin"></iframe>
+          <p id="visualPlaceholder" class="visual-placeholder">
+            Command visuals will render here.
+          </p>
+        </div>
+
+        <div class="listener-strip">
+          <p id="commandText" class="listener-copy">
+            {{ latest_command if latest_command else 'No command detected yet.' }}
+          </p>
+          <span class="status-chip {{ 'listening' if is_listening else 'paused' }}">
+            {{ status }}
+          </span>
+        </div>
+
+      </div>
+    </section>
+  </main>
+  <script>
+    (function () {
+      const transcriptEl = document.getElementById("transcriptStream");
+      const listenerStrip = document.querySelector(".listener-strip");
+      const commandTextEl = document.getElementById("commandText");
+      const visualBox = document.querySelector(".visual-box");
+      const visualFrame = document.getElementById("visualFrame");
+      const visualPlaceholder = document.getElementById("visualPlaceholder");
+      const maxLines = 250;
+      let lineCount = transcriptEl.querySelectorAll(".transcript-line").length;
+      let commandFlashTimer = null;
+      const initialDisplayHtml = {{ initial_display_html|tojson }};
+
+      function parseCommandLine(line) {
+        const prefix = 'COMMAND FOUND: "';
+        if (!line || !line.startsWith(prefix) || !line.endsWith('"')) {
+          return null;
+        }
+        return line.slice(prefix.length, -1);
+      }
+
+      function appendLine(text) {
+        const placeholder = document.getElementById("transcriptPlaceholder");
+        if (placeholder) {
+          placeholder.remove();
+        }
+
+        const lineEl = document.createElement("p");
+        lineEl.className = "transcript-line";
+        lineEl.textContent = text;
+        transcriptEl.appendChild(lineEl);
+        lineCount += 1;
+
+        while (lineCount > maxLines) {
+          const oldest = transcriptEl.querySelector(".transcript-line");
+          if (!oldest) {
+            lineCount = 0;
+            break;
+          }
+          oldest.remove();
+          lineCount -= 1;
+        }
+
+        transcriptEl.scrollTop = transcriptEl.scrollHeight;
+      }
+
+      function showCommand(command) {
+        if (!commandTextEl || !listenerStrip) {
+          return;
+        }
+        commandTextEl.textContent = command;
+        listenerStrip.classList.add("command-hit");
+        if (commandFlashTimer) {
+          clearTimeout(commandFlashTimer);
+        }
+        commandFlashTimer = setTimeout(function () {
+          listenerStrip.classList.remove("command-hit");
+        }, 3000);
+      }
+
+      function renderDisplay(html) {
+        if (!visualBox || !visualFrame || !html) {
+          return;
+        }
+        visualFrame.srcdoc = html;
+        visualBox.classList.add("has-content");
+        if (visualPlaceholder) {
+          visualPlaceholder.style.display = "none";
+        }
+      }
+
+      transcriptEl.scrollTop = transcriptEl.scrollHeight;
+      if (initialDisplayHtml) {
+        renderDisplay(initialDisplayHtml);
+      }
+
+      const events = new EventSource("{{ url_for('stream_transcript') }}?cursor={{ latest_event_id }}");
+      const displayEvents = new EventSource(
+        "{{ url_for('stream_display') }}?cursor={{ latest_display_event_id }}"
+      );
+
+      events.onmessage = function (event) {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload && payload.line) {
+            const command = parseCommandLine(payload.line);
+            if (command !== null) {
+              showCommand(command);
+              return;
+            }
+            appendLine(payload.line);
+          }
+        } catch (error) {
+          console.error("Transcript parse error", error);
+        }
+      };
+
+      displayEvents.onmessage = function (event) {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload && payload.html) {
+            renderDisplay(payload.html);
+          }
+        } catch (error) {
+          console.error("Display parse error", error);
+        }
+      };
+    })();
+  </script>
+</body>
+</html>
